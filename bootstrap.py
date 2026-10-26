@@ -26,7 +26,9 @@ def update_manager_source(repository: str) -> str:
             provider=ProviderConfig(type="github", repository=repository),
             installer="source",
         )
-        artifact = GitHubProvider().fetch(addon, temporary_root)
+        provider = GitHubProvider()
+        version = provider.resolve(addon)
+        artifact = provider.fetch(addon, temporary_root, version)
         downloaded_source = artifact.source_dir
         if not (downloaded_source / "cli.py").is_file():
             raise RuntimeError("Manager archive must contain cli.py at its repository root")

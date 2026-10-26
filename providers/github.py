@@ -30,27 +30,41 @@ class GitHubProvider:
             return f"github:{base}:{escaped_path}"
         return f"github:{base}"
 
-    def fetch(self, addon: AddonSpec, destination: Path) -> ProviderArtifact:
+    def resolve(self, addon: AddonSpec) -> ProviderRecord:
         config = addon.provider
         owner, repository = self._split_repository(config.repository)
         ref = config.ref or self._default_branch(owner, repository)
         commit_sha = self._resolve_commit(owner, repository, ref)
-        archive_root = self._download_archive(owner, repository, commit_sha, destination)
+        return ProviderRecord(
+            type=self.provider_type,
+            repository=config.repository,
+            ref=config.ref,
+            path=config.path,
+            commit_sha=commit_sha,
+        )
 
-        if config.path:
-            source_dir = self._select_subdirectory(archive_root, config.path)
+    def fetch(
+        self, addon: AddonSpec, destination: Path, version: ProviderRecord
+    ) -> ProviderArtifact:
+        config = addon.provider
+        if (
+            version.type != self.provider_type
+            or version.repository != config.repository
+            or version.path != config.path
+        ):
+            raise ProviderError("Resolved GitHub version does not match addon provider configuration")
+
+        owner, repository = self._split_repository(version.repository)
+        archive_root = self._download_archive(owner, repository, version.commit_sha, destination)
+
+        if version.path:
+            source_dir = self._select_subdirectory(archive_root, version.path)
         else:
             source_dir = archive_root
 
         return ProviderArtifact(
             addon_id=self.get_addon_id(addon),
-            provider=ProviderRecord(
-                type=self.provider_type,
-                repository=config.repository,
-                ref=config.ref,
-                path=config.path,
-                commit_sha=commit_sha,
-            ),
+            provider=version,
             source_dir=source_dir,
         )
 

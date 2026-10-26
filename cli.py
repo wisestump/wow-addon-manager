@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Sequence
 
+from installers.classless_wildcard import ClasslessWildcardInstaller
 from installers.registry import InstallerRegistry
 from lock_manager import LockManager
 from manifest import ManifestError, load_manifest
@@ -19,12 +21,14 @@ def build_parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
     sync = commands.add_parser("sync", help="synchronize addons to the manifest")
     sync.add_argument("--manifest", default="manifest.yaml", help="path to manifest.yaml")
+    sync.add_argument("--python", default=sys.executable, help="Python executable for installer scripts")
     return parser
 
 
-def create_installer_registry() -> InstallerRegistry:
-    """Concrete installers will be registered here when they are implemented."""
-    return InstallerRegistry()
+def create_installer_registry(python_executable: Path, logger: logging.Logger) -> InstallerRegistry:
+    registry = InstallerRegistry()
+    registry.register(ClasslessWildcardInstaller(python_executable, logger))
+    return registry
 
 
 def configure_logging(directory: Path) -> logging.Logger:
@@ -66,7 +70,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     providers = ProviderRegistry()
     providers.register(GitHubProvider())
-    installers = create_installer_registry()
+    installers = create_installer_registry(Path(args.python).expanduser().resolve(), logger)
     try:
         report = SyncManager(manifest, lock_manager, providers, installers, logger).sync()
     except SyncPlanError as exc:

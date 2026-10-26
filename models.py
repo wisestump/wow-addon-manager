@@ -114,6 +114,7 @@ class RemoveRequest:
     addon_id: str
     wow_path: Path
     previous: LockRecord
+    artifact: ProviderArtifact
 
 
 @dataclass(frozen=True)
