@@ -5,7 +5,6 @@ import ctypes
 import logging
 import os
 import sys
-from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Sequence
 
@@ -83,10 +82,9 @@ def configure_logging(directory: Path) -> logging.Logger:
     logger.addHandler(console)
 
     try:
-        file_handler = RotatingFileHandler(
+        file_handler = logging.FileHandler(
             directory / "wow-addon-manager.log",
-            maxBytes=2_000_000,
-            backupCount=3,
+            mode="w",
             encoding="utf-8",
         )
         file_handler.setFormatter(formatter)
