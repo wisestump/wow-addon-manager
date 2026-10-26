@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
 import logging
+import os
 import shutil
+import sys
 import tempfile
 import uuid
 from pathlib import Path
@@ -10,6 +13,43 @@ from typing import Sequence
 
 from models import AddonSpec, ProviderConfig
 from providers.github import GitHubProvider
+
+
+class ColorFormatter(logging.Formatter):
+    COLORS = {
+        logging.WARNING: "\x1b[33m",
+        logging.ERROR: "\x1b[31m",
+        logging.CRITICAL: "\x1b[31m",
+    }
+
+    def format(self, record: logging.LogRecord) -> str:
+        message = super().format(record)
+        color = self.COLORS.get(record.levelno)
+        if color is None:
+            return message
+        return f"{color}{message}\x1b[0m"
+
+
+class IssueTrackingHandler(logging.StreamHandler):
+    saw_issue = False
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if record.levelno >= logging.WARNING:
+            self.saw_issue = True
+        super().emit(record)
+
+
+def enable_windows_ansi() -> None:
+    if os.name != "nt" or not sys.stderr.isatty():
+        return
+    try:
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.GetStdHandle(-12)  # STDERR
+        mode = ctypes.c_uint()
+        if kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+            kernel32.SetConsoleMode(handle, mode.value | 0x0004)
+    except (AttributeError, OSError):
+        pass
 
 
 def update_manager_source(repository: str) -> str:
@@ -72,7 +112,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    enable_windows_ansi()
+    handler = IssueTrackingHandler()
+    handler.setFormatter(ColorFormatter("%(levelname)s %(message)s"))
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    root_logger.handlers.clear()
+    root_logger.addHandler(handler)
     args = build_parser().parse_args(argv)
     try:
         commit_sha = update_manager_source(args.repository)
@@ -80,7 +126,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         logging.exception("Manager self-update failed")
         return 1
     logging.info("Updated manager source to %s", commit_sha)
-    return 0
+    return 1 if handler.saw_issue else 0
 
 
 if __name__ == "__main__":
